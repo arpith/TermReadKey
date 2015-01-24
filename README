@@ -1,146 +1,276 @@
- Term::ReadKey 2.32 - Change terminal modes, and perform non-blocking reads.
+Term::ReadKey 2.32 - Change terminal modes, and perform non-blocking reads.
 
- Copyright (C) 1994-1999 Kenneth Albanowski. 
-               2001-2014 Jonathan Stowe and others
+package Term::ReadKey;
 
-This package is dual licensed.  You can either choose to license it under
-the original terms which were:
+=head1 NAME
 
- Unlimited distribution and/or modification is allowed as long as this 
- copyright notice remains intact.
+Term::ReadKey - A perl module for simple terminal control
 
-Or the standard Perl terms:
+=head1 SYNOPSIS
 
-  This module is free software; you can redistribute it and/or modify it
-  under the terms of the Artistic License. For details, see the full
-  text of the license in the file "Artistic" that should have been provided
-  with the version of perl you are using.
+    use Term::ReadKey;
+    ReadMode 4; # Turn off controls keys
+    while (not defined ($key = ReadKey(-1))) {
+        # No key yet
+    }
+    print "Get key $key\n";
+    ReadMode 0; # Reset tty mode before exiting
 
-  This program is distributed in the hope that it will be useful, but
-  without any warranty; without even the implied warranty of merchantability
-  or fitness for a particular purpose.
+=head1 DESCRIPTION
 
+Term::ReadKey is a compiled perl module dedicated to providing simple
+control over terminal driver modes (cbreak, raw, cooked, etc.,) support for
+non-blocking reads, if the architecture allows, and some generalized handy
+functions for working with terminals. One of the main goals is to have the
+functions as portable as possible, so you can just plug in "use
+Term::ReadKey" on any architecture and have a good likelihood of it working.
 
+Version 2.30.01:
+Added handling of arrows, page up/down, home/end, insert/delete keys 
+under Win32. These keys emit xterm-compatible sequences.
+Works with Term::ReadLine::Perl.
 
-This module, ReadKey, provides ioctl control for terminals and Win32
-consoles so the input modes can be changed (thus allowing reads of a single
-character at a time), and also provides non-blocking reads of stdin, as well
-as several other terminal related features, including retrieval/modification
-of the screen size, and retrieval/modification of the control characters.
-Installation requires MakeMaker 3.5 or higher (MakeMaker 3.7 is included
-with perl 5.001, so now is a good time to upgrade if you haven't already.)
+=over 4
 
-To install, unpack somewhere, type "perl Makefile.PL", and then "make test".
-If the compilation and the tests are successful, then change to root and run
-"make install".
+=item ReadMode MODE [, Filehandle]
 
-As of 2.17 the interactive test has been removed as the default for the
-convenience of automated installers, CPAN-Testers and so on.  The non
-interactive tests whilst confirming that the module has built correctly
-and has a good chance of working correctly cannot determine whether the
-effect as observed on the screen is correct so you might want to run:
+Takes an integer argument or a string synonym (case insensitive), which
+can currently be one of the following values:
 
-   perl -Mblib test.pl interactive
+    INT   SYNONYM    DESCRIPTION
 
-before you run 'make install'.
+    0    'restore'   Restore original settings.
 
-Also from 2.17 this module has to provide its own support for compilers
-that can't take function prototypes as with Perl 5.8.0 this last vestige
-of support for non-ANSI compilers will disappear.  The requirement for
-an ANSI C compiler has been present since Perl 5.005 so it is likely that
-at some point in the future this module will follow that requirement too.
-If you have any difficulties with older Perl's please contact the maintainer.
+    1    'normal'    Change to what is commonly the default mode,
+                     echo on, buffered, signals enabled, Xon/Xoff
+                     possibly enabled, and 8-bit mode possibly disabled.
 
-The module has support for Win32 since version 2.10. Version 2.17 has been
-tested with ActivePerl build 623 and Visual Studio 6 and found to work
-as expected, but do not be surprised if it fails with another compiler
-or distribution.  There are  some limitations, with the ReadLine call
-being unavailable, and ReadKey possibly generating bad results if you
-are reading from multiple consoles, and key repeat is used.  For Win32
-users without a C compiler there is a precompiled version of this module
-available as a package for ActivePerl, it is probably a few versions
-behind the latest release but has been reported to work well.
+    2    'noecho'    Same as 1, just with echo off. Nice for
+                     reading passwords.
 
-VERY IMPORTANT: In 2.00, the ReadKey/ReadLine arguments changed. Now, if
-you want a call that is non-blocking and returns immediately if no
-character is waiting, please call it with -1, instead of 1. Positive
-arguments now indicate a timeout, so 1 would wait a second before timing
-out.
+    3    'cbreak'    Echo off, unbuffered, signals enabled, Xon/Xoff
+                     possibly enabled, and 8-bit mode possibly enabled.
 
-As older versions will accept -1, it is reccomended to change all code 
-that uses ReadMode.
+    4    'raw'       Echo off, unbuffered, signals disabled, Xon/Xoff
+                     disabled, and 8-bit mode possibly disabled.
+
+    5    'ultra-raw' Echo off, unbuffered, signals disabled, Xon/Xoff 
+                     disabled, 8-bit mode enabled if parity permits,
+                     and CR to CR/LF translation turned off. 
 
 
-The terminal mode function is controlled by the "ReadMode" function, which
-takes a single numeric argument, and an optional filehandle. This argument
-should be one of the following:
-
-	0: (Reset) Restore original settings.
-
-	1: (Cooked) Change to what is commonly the default mode, echo on,
-           buffered, signals enabled, Xon/Xoff possibly enabled, and 8-bit mode 
-	   possibly disabled.
-
-	2: (Cooked-Invisible) Same as 1, just with echo off. Nice for reading 
-           passwords.
-
-	3: (CBreak) Echo off, unbuffered, signals enabled, Xon/Xoff possibly 
-           enabled, and 8-bit mode possibly enabled.
-
-	4: (Raw) Echo off, unbuffered, signals disabled, Xon/Xoff disabled, 
-           and 8-bit mode possibly disabled.
-
-	5: (Really-Raw) Echo off, unbuffered, signals disabled, Xon/Xoff 
-           disabled, 8-bit mode enabled if parity permits, and CR to CR/LF 
-           translation turned off. 
+These functions are automatically applied to the STDIN handle if no
+other handle is supplied. Modes 0 and 5 have some special properties
+worth mentioning: not only will mode 0 restore original settings, but it
+cause the next ReadMode call to save a new set of default settings. Mode
+5 is similar to mode 4, except no CR/LF translation is performed, and if
+possible, parity will be disabled (only if not being used by the terminal,
+however. It is no different from mode 4 under Windows.)
 
 If you just need to read a key at a time, then modes 3 or 4 are probably
 sufficient. Mode 4 is a tad more flexible, but needs a bit more work to
 control. If you use ReadMode 3, then you should install a SIGINT or END
 handler to reset the terminal (via ReadMode 0) if the user aborts the
-program via ^C. (For any mode, an END handler consisting of "ReadMode 0" is
-actually a good idea.)
+program via C<^C>. (For any mode, an END handler consisting of "ReadMode 0"
+is actually a good idea.)
 
-Non-blocking support is provided via the ReadKey and ReadLine functions. If
-they are passed no argument, or an argument of zero, they will act like a
-normal getc(STDIN) or scalar(<STDIN>). If they are passed a negative
-argument, then they will immediatly return undef if no input is present. If
-passed a positive argument, then they will wait until that time in seconds
-has passed before returning undef. In most situations, you will probably
-want to use "ReadKey -1".
+If you are executing another program that may be changing the terminal mode,
+you will either want to say
 
-Note that a non-blocking ReadLine probably won't do what you expect,
-although it is perfectly predictable, and that the ReadMode will have to be
-1 or 0 for it to make sense at all.
+    ReadMode 1;             # same as ReadMode 'normal'
+    system('someprogram');
+    ReadMode 1;
 
-A routine is also provided to get the current terminal size,
-"GetTerminalSize". This will either return a four value array containing the
-width and height of the screen in characters and then in pixels, or nothing
-( if the OS can't return that info). SetTerminalSize allows the stored
-settings to be modified. Note that this does _not_ change the physical size
-of the screen, it will only change the size reported by GetTerminalSize, and
-other programs that check the terminal size in the same manner.
+which resets the settings after the program has run, or:
 
-GetControlChars returns a hash containing all of the valid control
-characters, such as ("INTERRUPT" => "\x3", etc.). SetControlChars takes an
-array (or a hash) as a parameter that should consist of similar name/value
-pairs and will modify the control character settings.
+    $somemode=1;
+    ReadMode 0;             # same as ReadMode 'restore'
+    system('someprogram');
+    ReadMode 1;
 
-Note that it is entirely possible that there are portability problems with
-the routines in ReadKey.xs. If you find any problems, including compilation
-failures, or control characters not supported by Set/GetControlChars,
-_please_ tell me about them, by mailing the maintainer at jns@gellyfish.co.uk,
- or lastly contacting perl5-porters@perl.org. Any problems
-will get fixed if at all possible, but that's not going to happen if I don't
-know about them.
+which records any changes the program may have made, before resetting the
+mode.
 
-The code is available at https://github.com/jonathanstowe/TermReadKey so
-as ever patches are kindly welcomed, especially for platforms such as 
-Windows that I am unable to test on.
+=item ReadKey MODE [, Filehandle]
 
-Oh, you may also be interested in the Configure.pm module. It provides tools
-to make porting stuff easier -- calling the compiler, finding headers, etc.
-It contains documentation inside it, and you are welcome to use it in your
-own modules. If you make use of it, I'd be grateful for a message sent to
-the above address.
+Takes an integer argument, which can currently be one of the following 
+values:
 
+    0    Perform a normal read using getc
+    -1   Perform a non-blocked read
+    >0	 Perform a timed read
+
+If the filehandle is not supplied, it will default to STDIN. If there is
+nothing waiting in the buffer during a non-blocked read, then undef will be
+returned.  In most situations, you will probably want to use C<ReadKey -1>.
+
+I<NOTE> that if the OS does not provide any known mechanism for non-blocking
+reads, then a C<ReadKey -1> can die with a fatal error. This will hopefully
+not be common.
+
+If MODE is greater then zero, then ReadKey will use it as a timeout value in
+seconds (fractional seconds are allowed), and won't return C<undef> until
+that time expires.
+
+I<NOTE>, again, that some OS's may not support this timeout behaviour.
+
+If MODE is less then zero, then this is treated as a timeout
+of zero, and thus will return immediately if no character is waiting. A MODE
+of zero, however, will act like a normal getc.
+
+I<NOTE>, there are currently some limitations with this call under Windows.
+It may be possible that non-blocking reads will fail when reading repeating
+keys from more then one console.
+
+
+=item ReadLine MODE [, Filehandle]
+
+Takes an integer argument, which can currently be one of the following 
+values:
+
+    0    Perform a normal read using scalar(<FileHandle>)
+    -1   Perform a non-blocked read
+    >0	 Perform a timed read
+
+If there is nothing waiting in the buffer during a non-blocked read, then
+undef will be returned.
+
+I<NOTE>, that if the OS does not provide any known mechanism for
+non-blocking reads, then a C<ReadLine 1> can die with a fatal
+error. This will hopefully not be common.
+
+I<NOTE> that a non-blocking test is only performed for the first character
+in the line, not the entire line.  This call will probably B<not> do what
+you assume, especially with C<ReadMode> MODE values higher then 1. For
+example, pressing Space and then Backspace would appear to leave you
+where you started, but any timeouts would now be suspended.
+
+B<This call is currently not available under Windows>.
+
+=item GetTerminalSize [Filehandle]
+
+Returns either an empty array if this operation is unsupported, or a four
+element array containing: the width of the terminal in characters, the
+height of the terminal in character, the width in pixels, and the height in
+pixels. (The pixel size will only be valid in some environments.)
+
+I<NOTE>, under Windows, this function must be called with an B<output>
+filehandle, such as C<STDOUT>, or a handle opened to C<CONOUT$>.
+
+=item SetTerminalSize WIDTH,HEIGHT,XPIX,YPIX [, Filehandle]
+
+Return -1 on failure, 0 otherwise.
+
+I<NOTE> that this terminal size is only for B<informative> value, and
+changing the size via this mechanism will B<not> change the size of
+the screen. For example, XTerm uses a call like this when
+it resizes the screen. If any of the new measurements vary from the old, the
+OS will probably send a SIGWINCH signal to anything reading that tty or pty.
+
+B<This call does not work under Windows>.
+
+=item GetSpeeds [, Filehandle]
+
+Returns either an empty array if the operation is unsupported, or a two
+value array containing the terminal in and out speeds, in B<decimal>. E.g,
+an in speed of 9600 baud and an out speed of 4800 baud would be returned as
+(9600,4800). Note that currently the in and out speeds will always be
+identical in some OS's.
+
+B<No speeds are reported under Windows>.
+
+=item GetControlChars [, Filehandle]
+
+Returns an array containing key/value pairs suitable for a hash. The pairs
+consist of a key, the name of the control character/signal, and the value
+of that character, as a single character.
+
+B<This call does nothing under Windows>.
+
+Each key will be an entry from the following list:
+
+	DISCARD
+	DSUSPEND
+	EOF
+	EOL
+	EOL2
+	ERASE
+	ERASEWORD
+	INTERRUPT
+	KILL
+	MIN
+	QUIT
+	QUOTENEXT
+	REPRINT
+	START
+	STATUS
+	STOP
+	SUSPEND
+	SWITCH
+	TIME
+
+Thus, the following will always return the current interrupt character,
+regardless of platform.
+
+	%keys = GetControlChars;
+	$int = $keys{INTERRUPT};
+
+=item SetControlChars [, Filehandle]
+
+Takes an array containing key/value pairs, as a hash will produce. The pairs
+should consist of a key that is the name of a legal control
+character/signal, and the value should be either a single character, or a
+number in the range 0-255. SetControlChars will die with a runtime error if
+an invalid character name is passed or there is an error changing the
+settings. The list of valid names is easily available via
+
+	%cchars = GetControlChars();
+	@cnames = keys %cchars;
+
+B<This call does nothing under Windows>.
+
+=back
+
+=head1 AUTHOR
+
+Kenneth Albanowski <kjahds@kjahds.com>
+
+Currently maintained by Jonathan Stowe <jns@gellyfish.co.uk>
+
+=head1 SUPPORT
+
+The code is maintained at 
+
+     https://github.com/jonathanstowe/TermReadKey
+
+Please feel free to fork and suggest patches.
+
+
+=head1 LICENSE
+
+Prior to the 2.31 release the license statement was:
+
+ Copyright (C) 1994-1999 Kenneth Albanowski.
+                2001-2005 Jonathan Stowe and others
+
+                 Unlimited distribution and/or modification is allowed as long as this
+                  copyright notice remains intact.
+
+And was only stated in the README file.
+
+Because I believe the original author's intent was to be more open than the
+other commonly used licenses I would like to leave that in place. However if
+you or your lawyers require something with some more words you can optionally
+choose to license this under the standard Perl license:
+
+      This module is free software; you can redistribute it and/or modify it
+      under the terms of the Artistic License. For details, see the full
+      text of the license in the file "Artistic" that should have been provided
+      with the version of perl you are using.
+
+      This program is distributed in the hope that it will be useful, but
+      without any warranty; without even the implied warranty of merchantability
+      or fitness for a particular purpose.
+
+
+=cut
